@@ -1,0 +1,64 @@
+// mini_lang.lark - Gramática para un lenguaje simple
+
+// Punto de inicio del programa
+start: statement*
+
+// Definición de instrucciones
+statement: var_declaration
+         | assignment
+         | if_statement
+         | while_loop
+         | for_loop
+         | print_statement
+         | input_statement
+         | block
+
+// Declaración de variables
+var_declaration: "var" NAME ("=" expression)? ";"
+
+// Asignación
+assignment: NAME "=" expression ";"
+
+// Estructuras de control
+if_statement: "if" "(" expression ")" statement ["else" statement]
+while_loop: "while" "(" expression ")" statement
+for_loop: "for" "(" [for_init] ";" [expression] ";" [for_update] ")" statement
+for_init: for_var_declaration | for_assignment | expression
+for_var_declaration: "var" NAME ("=" expression)?  // Sin punto y coma
+for_update: for_assignment | expression
+
+// Asignación especial para for (sin punto y coma)
+for_assignment: NAME "=" expression
+
+// Entrada/Salida
+print_statement: "print" "(" [expression ("," expression)*] ")" ";"
+input_statement: "input" "(" NAME ")" ";"
+
+// Bloques de código
+block: "{" statement* "}"
+
+// Expresiones
+expression: or_expr
+
+or_expr: and_expr ("||" and_expr)*
+and_expr: equality ("&&" equality)*
+equality: comparison (("==" | "!=") comparison)*
+comparison: term (("<" | ">" | "<=" | ">=") term)*
+term: factor (("+" | "-") factor)*
+factor: unary (("*" | "/") unary)*
+unary: ("!" | "-")? primary
+primary: NUMBER | STRING | NAME | "(" expression ")" | function_call
+
+// Llamada a funciones (extensión)
+function_call: NAME "(" [expression ("," expression)*] ")"
+
+// Tokens
+NAME: /[a-zA-Z_][a-zA-Z0-9_]*/
+NUMBER: /[0-9]+(\.[0-9]+)?/
+STRING: /"[^"]*"/ | /'[^']*'/
+COMMENT: /\/\/[^\n]*/ | /\/\*(.|\n)*?\*\//
+
+// Ignorar espacios en blanco y comentarios
+%import common.WS
+%ignore WS
+%ignore COMMENT
