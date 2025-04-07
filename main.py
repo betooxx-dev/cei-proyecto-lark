@@ -188,7 +188,7 @@ class SemanticAnalyzer(Transformer):
         self.transform(items[0])
         return True
 
-class MiInterpreter(Transformer):
+class Interpreter(Transformer):
     def __init__(self):
         super().__init__()
         self.variables = {}
@@ -338,21 +338,34 @@ class MiInterpreter(Transformer):
         return None
 
     def for_statement(self, items):
-     print(items)
-     init_result = items[0]
-     condition_result = items[1]
-     update_result = items[2]
-     body_result = items[3]
-     
-     # Inicialización de la variable 'i' si es necesario
-     if isinstance(init_result, Tree) and init_result.data == 'assignment_statement':
-         var_token = init_result.children[0]
-         if var_token.value == 'i':  # Inicializamos 'i' a 0 o el valor que necesites.
-             self.variables['i'] = 0  # Establecer el valor inicial aquí (por ejemplo, 0).
-     
-
-         
-     return None
+        print(f"[DEBUG] for_statement items: {items}")
+        
+        # Extract parts of the for loop
+        init_part = items[0]
+        condition_part = items[1]
+        update_part = items[2]
+        body = items[3]
+        
+        # Execute initialization part
+        if init_part is not None:
+            self.transform(init_part)
+        
+        # Continue loop while condition is true
+        while True:
+            # Check condition (if it exists)
+            if condition_part is not None:
+                condition_result = self.transform(condition_part)
+                if not condition_result:
+                    break
+            
+            # Execute body
+            self.transform(body)
+            
+            # Execute update part
+            if update_part is not None:
+                self.transform(update_part)
+        
+        return None
  
  
 
@@ -553,29 +566,29 @@ if __name__ == "__main__":
         sys.exit(1)
 
     codigo_fuente = """
-    print("Bienvenido al programa de prueba!");
-    nombre = "Mundo";
-    a=22;
-    pato=88;
-    c="gato";
-    if (c=="calabaza") then {}
-    x=a>12;
-    print("alogo");
-    print("Hola, " + nombre + "!");
-    contador = 0;
-    limite = 3;
-    print("Iniciando 'bucle' for (simulado)...");
-    for (i = 0; i < limite; i = i + 1) {
-      print("Dentro del for ");
-      print(i); 
-      contador = contador + 10; 
+    print("Programa de cálculo simple");
+
+    a = 5;
+    b = 10;
+    suma = a + b;
+
+    print("El valor de a es: " + a);
+    print("El valor de b es: " + b);
+    print("La suma de a + b es: " + suma);
+
+    if (suma > 10) then {
+        print("La suma es mayor que 10");
+    } else {
+        print("La suma es menor o igual a 10");
     }
-    print("Después del 'bucle' for.");
-    print("Valor final de i (después de una inicialización y una actualización):");
-    print(i); 
-    print("Valor final de contador (después de una ejecución del cuerpo):");
-    print(contador); 
-    print("--- Fin del programa ---");
+
+    resta = b - a;
+    print("La resta b - a es: " + resta);
+
+    doble = suma * 2;
+    print("El doble de la suma es: " + doble);
+
+    print("Fin del programa");
     """
 
     try:
@@ -583,7 +596,7 @@ if __name__ == "__main__":
         print("\n--- Árbol de sintaxis abstracta (AST) ---")
         print(parse_tree.pretty())
         print("\n--- Interpretación / Ejecución con Transformer ---")
-        interpreter = MiInterpreter()
+        interpreter = Interpreter()
         interpreter.transform(parse_tree)
         print("\n--- Tabla de Símbolos (Variables en Runtime) ---")
         
