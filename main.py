@@ -51,7 +51,7 @@ function_call_statement: function_call ";"
 function_call: IDENTIFIER "(" [argument_list] ")"
 argument_list: expression ("," expression)*
 
-// Print statement (preserve existing functionality)
+// Print statement
 print_statement: "print" "(" expression ")" ";"
 
 // Control structures
@@ -155,7 +155,7 @@ class SemanticAnalyzer(Transformer):
         return None
 
     def print_statement(self, items): 
-        self.transform(items[2])
+        self.transform(items[0])
         return None
 
     def if_statement(self, items): 
@@ -192,6 +192,159 @@ class Interpreter(Transformer):
     def __init__(self):
         super().__init__()
         self.variables = {}
+        self.functions = {}  # Almacena las funciones definidas
+        self.in_function = False  # Indica si estamos dentro de una función
+        self.return_value = None  # Almacena el valor de retorno
+
+    # Método personalizado para transformar árboles
+    def _custom_transform(self, node):
+        print(f"[DEBUG] Processing node: {type(node)} - {node}")
+        
+        # Si es un árbol, lo procesamos según su tipo
+        if isinstance(node, Tree):
+            # Procesamiento según el tipo de nodo
+            if node.data == 'var':
+                # Acceso a variable
+                var_name = node.children[0].value
+                if var_name not in self.variables:
+                    raise NameError(f"Variable '{var_name}' no ha sido asignada.")
+                return self.variables[var_name]
+                
+            elif node.data == 'comparison':
+                # Mirando el árbol AST, vemos que comparison tiene estructura específica
+                print(f"[DEBUG] Comparison node with {len(node.children)} children: {node.children}")
+                
+                # Si solo hay un hijo, podría ser una variable, número u otra expresión
+                if len(node.children) == 1:
+                    return self._custom_transform(node.children[0])
+                    
+                # Si hay 3 hijos, es una comparación completa: valor operador valor
+                if len(node.children) == 3:
+                    left_node = node.children[0]
+                    operator_token = node.children[1]
+                    right_node = node.children[2]
+                    
+                    left_value = self._custom_transform(left_node)
+                    right_value = self._custom_transform(right_node)
+                    operator = operator_token.value
+                    
+                    print(f"[DEBUG] Evaluating comparison: {left_value} {operator} {right_value}")
+                    
+                    if operator == '<': 
+                        result = left_value < right_value
+                        print(f"[DEBUG] Result of {left_value} < {right_value}: {result}")
+                        return result
+                    elif operator == '>': 
+                        result = left_value > right_value
+                        print(f"[DEBUG] Result of {left_value} > {right_value}: {result}")
+                        return result
+                    elif operator == '<=': 
+                        result = left_value <= right_value
+                        print(f"[DEBUG] Result of {left_value} <= {right_value}: {result}")
+                        return result
+                    elif operator == '>=': 
+                        result = left_value >= right_value
+                        print(f"[DEBUG] Result of {left_value} >= {right_value}: {result}")
+                        return result
+                    elif operator == '==': 
+                        result = left_value == right_value
+                        print(f"[DEBUG] Result of {left_value} == {right_value}: {result}")
+                        return result
+                    elif operator == '!=': 
+                        result = left_value != right_value
+                        print(f"[DEBUG] Result of {left_value} != {right_value}: {result}")
+                        return result
+                
+                # Si no coincide con los patrones anteriores, procesamos el primer hijo
+                return self._custom_transform(node.children[0])
+                
+            elif node.data == 'logical_expr':
+                print(f"[DEBUG] Logical expression node with {len(node.children)} children")
+                
+                # Si solo hay un hijo, podría ser una comparación u otra expresión
+                if len(node.children) == 1:
+                    return self._custom_transform(node.children[0])
+                    
+                # Para manejo de múltiples operadores lógicos (a && b && c)
+                if len(node.children) >= 3:
+                    # Primer elemento siempre es una expresión
+                    left_result = self._custom_transform(node.children[0])
+                    
+                    # Procesar todos los operadores lógicos en secuencia
+                    result = left_result
+                    for i in range(1, len(node.children) - 1, 2):
+                        operator = node.children[i].value
+                        right_expr = node.children[i + 1]
+                        right_result = self._custom_transform(right_expr)
+                        
+                        print(f"[DEBUG] Logical operation: {result} {operator} {right_result}")
+                        
+                        if operator == '&&':
+                            result = bool(result) and bool(right_result)
+                        elif operator == '||':
+                            result = bool(result) or bool(right_result)
+                            
+                        print(f"[DEBUG] Logical result: {result}")
+                    
+                    return result
+                
+                # Caso por defecto, devolver el valor del primer hijo
+                return self._custom_transform(node.children[0])
+                
+            elif node.data == 'add':
+                left = self._custom_transform(node.children[0])
+                right = self._custom_transform(node.children[1])
+                print(f"[DEBUG] Add: {left} + {right}")
+                
+                if isinstance(left, str) or isinstance(right, str):
+                    return str(left) + str(right)  # Concatenación
+                else:
+                    return left + right  # Suma aritmética
+                    
+            elif node.data == 'sub':
+                left = self._custom_transform(node.children[0])
+                right = self._custom_transform(node.children[1])
+                print(f"[DEBUG] Sub: {left} - {right}")
+                return left - right
+                
+            elif node.data == 'mul':
+                left = self._custom_transform(node.children[0])
+                right = self._custom_transform(node.children[1])
+                print(f"[DEBUG] Mul: {left} * {right}")
+                return left * right
+                
+            elif node.data == 'div':
+                left = self._custom_transform(node.children[0])
+                right = self._custom_transform(node.children[1])
+                print(f"[DEBUG] Div: {left} / {right}")
+                
+                if right == 0:
+                    raise ZeroDivisionError("División por cero.")
+                    
+                return left / right
+                
+            elif node.data == 'number':
+                value = node.children[0].value
+                try:
+                    return int(value)
+                except ValueError:
+                    return float(value)
+                    
+            elif node.data == 'string':
+                return node.children[0].value[1:-1]  # Quitar comillas
+                
+            elif node.data == 'boolean':
+                return node.children[0].value == "true"
+            
+            # Para otros tipos de nodos, usar la transformación regular
+            return super().transform(node)
+            
+        # Si es un token, devolvemos su valor
+        elif isinstance(node, Token):
+            return node.value
+            
+        # Cualquier otro caso
+        return node
 
     def number(self, items):
         val = items[0].value
@@ -201,7 +354,7 @@ class Interpreter(Transformer):
             return float(val)
 
     def string(self, items):
-        return items[0].value[1:-1]
+        return items[0].value[1:-1]  # Quitar comillas
 
     def boolean(self, items):
         return items[0].value == "true"
@@ -221,216 +374,152 @@ class Interpreter(Transformer):
 
     def var(self, items): 
         var_name = items[0].value
-        if var_name == 'i':
-            self.variables[var_name] = 0  
         if var_name not in self.variables:
             raise NameError(f"Variable '{var_name}' no ha sido asignada.")
         
         return self.variables[var_name]
 
-    def _division_by_zero(self): 
-        raise ZeroDivisionError("División por cero.")
-    def comparison(self, items):
-      print(f"[DEBUG] Comparison items: {items}")
-      if len(items) == 1: 
-          return items[0]
-      elif len(items) == 2:
-          left, right = items
-          return left == right
-      elif len(items) == 3:
-          left = items[0]
-          op_token = items[1]
-          right = items[2]
-          op = op_token.value
-          try:
-              if op == '<': return left < right
-              if op == '>': return left > right
-              if op == '<=': return left <= right
-              if op == '>=': return left >= right
-              if op == '==': return left == right
-              if op == '!=': return left != right
-          except TypeError:
-              raise TypeError(f"Operación de comparación '{op}' inválida entre los tipos {type(left).__name__} y {type(right).__name__} (valores: {repr(left)}, {repr(right)})")
+    # Estos métodos ya se manejan en _custom_transform
     def add(self, items):
-     print(items)
-     # Si el elemento ya es primitivo (string, int, etc.), lo usamos tal cual
-     left = items[0] if not hasattr(items[0], 'children') else self.transform(items[0])
-     right = items[1] if not hasattr(items[1], 'children') else self.transform(items[1])
-     
-     if isinstance(left, str) or isinstance(right, str):
-          # Concatenación si alguno es string
-          return str(left) + str(right)
-     elif isinstance(left, (int, float)) and isinstance(right, (int, float)):
-          return left + right
-     else:
-          # Si no se permite otra combinación, se lanza error
-          raise TypeError(f"Operación '+' inválida entre {type(left).__name__} y {type(right).__name__}")
-
-
+        return self._custom_transform(Tree('add', items))
 
     def sub(self, items):
-        left = self.transform(items[0])
-        right = self.transform(items[1])
-        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-            return left - right
-        else:
-            raise TypeError(f"Operación '-' inválida entre {type(left).__name__} y {type(right).__name__}")
+        return self._custom_transform(Tree('sub', items))
 
     def mul(self, items):
-        left = self.transform(items[0])
-        right = self.transform(items[1])
-        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-            return left * right
-        else:
-            # Podrías permitir string * int para repetición si quieres
-            raise TypeError(f"Operación '*' inválida entre {type(left).__name__} y {type(right).__name__}")
+        return self._custom_transform(Tree('mul', items))
 
     def div(self, items):
-        left = self.transform(items[0])
-        right = self.transform(items[1])
-        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-            if right == 0:
-                self._division_by_zero()
-            # Considerar división entera vs flotante si es necesario
-            return left / right
-        else:
-            raise TypeError(f"Operación '/' inválida entre {type(left).__name__} y {type(right).__name__}")
-
+        return self._custom_transform(Tree('div', items))
 
     def assignment_statement(self, items):
-     print("[DEBUG] assignment_statement items:", items)
-     assignment_expr = items[0]
-     print("[DEBUG] assignment_expr:", assignment_expr)
-     var_token, value_node = assignment_expr.children
-     self._assign(var_token, value_node)
-     return None
- 
-
-    def _assign(self, var_token, value):
-        var_name = var_token.value if hasattr(var_token, "value") else str(var_token)
+        assignment_expr = items[0]
+        print(f"[DEBUG] Assignment: {assignment_expr}")
+        
+        var_token = assignment_expr.children[0]
+        value_node = assignment_expr.children[1]
+        
+        value = self._custom_transform(value_node)
+        var_name = var_token.value
+        
+        print(f"[DEBUG] Assigning {var_name} = {value}")
+        
         self.variables[var_name] = value
-     
-    def expression_statement(self, items): 
         return None
 
     def print_statement(self, items):
-        print(f"[DEBUG] Items received in print_statement: {items}")
-        if len(items) == 2:
-             value_to_print = items[1]
-             print(f"[DEBUG] Print_statement: Valor a imprimir (de items[1]): {repr(value_to_print)}")
-             print(value_to_print)
-        else:
-           value_to_print = items[0]
+        expr_node = items[0]
+        value = self._custom_transform(expr_node)
+        
+        print(f"[DEBUG] Print value: {value}")
+        print(value)
+        
         return None
 
     def if_statement(self, items):
-     print("[DEBUG] if_statement items:", items)
-     # Se asume que items[0] es la condición
-     condition_result = items[0] if not isinstance(items[0], Tree) else self.transform(items[0])
-     if condition_result:  # Si la condición se evalúa como verdadera
-          self.transform(items[1])  # Ejecutar el bloque "then"
-     elif len(items) == 3:  # Si existe un bloque "else"
-          self.transform(items[2])
-     return None
+        print(f"[DEBUG] if_statement with items: {items}")
+        
+        # La condición está en el primer elemento
+        condition_node = items[0]
+        
+        # Usar _custom_transform para evaluar la condición correctamente
+        condition_result = self._custom_transform(condition_node)
+        
+        print(f"[DEBUG] If condition evaluated to: {condition_result}")
+        
+        # Convertir explícitamente a booleano
+        condition_result = bool(condition_result)
+        
+        # Ejecutar solo el bloque correspondiente basado en la condición
+        if condition_result:
+            # Bloque 'then'
+            print("[DEBUG] Executing THEN block")
+            then_block = items[1]
+            self.transform(then_block)
+        elif len(items) >= 3 and items[2] is not None:
+            # Bloque 'else' (si existe)
+            print("[DEBUG] Executing ELSE block")
+            else_block = items[2]
+            self.transform(else_block)
+            
+        return None
 
+    def while_statement(self, items):
+        print(f"[DEBUG] while_statement with items: {items}")
+        
+        condition_node = items[0]
+        body_node = items[1]
+        
+        iteration = 0
+        # Evaluar la condición inicial usando _custom_transform
+        condition_result = self._custom_transform(condition_node)
+        print(f"[DEBUG] While initial condition: {condition_result}")
+        
+        # Asegurarse de que la condición sea un booleano
+        condition_result = bool(condition_result)
+        
+        # Bucle while
+        while condition_result:
+            print(f"[DEBUG] Executing while loop iteration {iteration}")
+            iteration += 1
+            
+            # Ejecutar el cuerpo
+            self.transform(body_node)
+            
+            # Re-evaluar la condición
+            condition_result = self._custom_transform(condition_node)
+            print(f"[DEBUG] While condition re-evaluated: {condition_result}")
+            
+            # Convertir a booleano para la próxima iteración
+            condition_result = bool(condition_result)
+            
+        return None
 
-    def program(self, items): 
+    def block_statement(self, items):
+        if not items or items[0] is None:
+            return None
+            
+        if not hasattr(items[0], 'children'):
+            return None
+            
+        for statement in items[0].children:
+            if statement is not None:
+                self.transform(statement)
+                
         return None
 
     def for_statement(self, items):
-        print(f"[DEBUG] for_statement items: {items}")
-        
-        # Extract parts of the for loop
         init_part = items[0]
         condition_part = items[1]
         update_part = items[2]
         body = items[3]
         
-        # Execute initialization part
+        # Ejecutar la parte de inicialización
         if init_part is not None:
             self.transform(init_part)
         
-        # Continue loop while condition is true
+        # Bucle for
         while True:
-            # Check condition (if it exists)
+            # Comprobar la condición (si existe)
             if condition_part is not None:
-                condition_result = self.transform(condition_part)
+                condition_result = self._custom_transform(condition_part)
                 if not condition_result:
                     break
             
-            # Execute body
+            # Ejecutar el cuerpo
             self.transform(body)
             
-            # Execute update part
+            # Ejecutar la parte de actualización
             if update_part is not None:
                 self.transform(update_part)
-        
+                
         return None
- 
- 
 
-    def for_init_part(self, items):
-        if not items:
-            return None
-        return items[0]
-
-    def for_condition_part(self, items):
-        if not items:
-            return True
-        return items[0]
-
-    def for_update_part(self, items):
-        if not items:
-            return None
-        return items[0]
-    
-    def func_call(self, items):
-        function_name = items[0].value
-        arguments = items[1:] if len(items) > 1 else []
-        
-        if function_name not in self.functions:
-            raise NameError(f"Función '{function_name}' no está definida.")
-        
-        function_info = self.functions[function_name]
-        parameters = function_info["parameters"]
-        body = function_info["body"]
-        return_type = function_info["return_type"]
-        
-        # Create a new scope for function variables
-        old_variables = self.variables.copy()
-        self.variables = {}
-        
-        # Assign arguments to parameters
-        for i, param in enumerate(parameters):
-            if i < len(arguments):
-                param_name, param_type = param
-                self.variables[param_name] = arguments[i]
-            else:
-                raise ValueError(f"Faltan argumentos para la función '{function_name}'")
-        
-        # Remember we're in a function to handle return statements
-        old_in_function = self.in_function
-        self.in_function = True
-        old_return_value = self.return_value
-        self.return_value = None
-        
-        # Execute function body
-        self.transform(body)
-        
-        # Get the return value and restore state
-        result = self.return_value
-        self.return_value = old_return_value
-        self.in_function = old_in_function
-        self.variables = old_variables
-        
-        return result
-    
-    # Method for function declaration
     def function_declaration(self, items):
         return_type = items[0].value
         function_name = items[1].value
         parameters = items[2] if len(items) > 2 else []
-        body = items[-1]  # Last item is the function body
+        body = items[-1]
         
         self.functions[function_name] = {
             "return_type": return_type,
@@ -439,123 +528,114 @@ class Interpreter(Transformer):
         }
         
         return None
-    
-    # Method for parameter list
+
     def parameter_list(self, items):
         return items
-    
-    # Method for individual parameters
+
     def parameter(self, items):
         param_type = items[0].value
         param_name = items[1].value
         return (param_name, param_type)
-    
-    # Method for return statements
+
     def return_statement(self, items):
         if not self.in_function:
             raise SyntaxError("Return statement outside of function")
         
-        return_value = self.transform(items[0])
+        return_value = self._custom_transform(items[0])
         self.return_value = return_value
-        return None
-    
-    # Method for while statements
-    def while_statement(self, items):
-        condition_node = items[0]
-        body_node = items[1]
-        
-        while self.transform(condition_node):
-            self.transform(body_node)
         
         return None
-    
-    # Method for variable declarations with types
-    def variable_declaration(self, items):
-        var_type = items[0].value
-        var_name = items[1].value
+
+    def func_call(self, items):
+        function_name = items[0].value
+        arguments = [self._custom_transform(arg) for arg in items[1:]] if len(items) > 1 else []
         
-        # If there's an initializer expression
-        if len(items) > 2:
-            init_value = self.transform(items[2])
-            # Should do type checking here
-            self.variables[var_name] = init_value
-        else:
-            # Initialize with default value based on type
-            if var_type == "int":
-                self.variables[var_name] = 0
-            elif var_type == "float":
-                self.variables[var_name] = 0.0
-            elif var_type == "string":
-                self.variables[var_name] = ""
+        if function_name not in self.functions:
+            raise NameError(f"Función '{function_name}' no está definida.")
         
-        return None
-    
-    # Update logical operators
-    def logical_expr(self, items):
-        if len(items) == 1:
-            return items[0]
+        function_info = self.functions[function_name]
+        parameters = function_info["parameters"]
+        body = function_info["body"]
         
-        left = items[0]
-        op = items[1].value
-        right = items[2]
+        # Crear un nuevo ámbito para las variables de la función
+        old_variables = self.variables.copy()
+        self.variables = {}
         
-        if op == "&&":
-            return left and right
-        elif op == "||":
-            return left or right
+        # Asignar argumentos a parámetros
+        for i, param in enumerate(parameters):
+            if i < len(arguments):
+                param_name, param_type = param
+                self.variables[param_name] = arguments[i]
+            else:
+                raise ValueError(f"Faltan argumentos para la función '{function_name}'")
         
+        # Configurar el entorno de la función
+        old_in_function = self.in_function
+        self.in_function = True
+        old_return_value = self.return_value
+        self.return_value = None
         
+        # Ejecutar el cuerpo de la función
+        self.transform(body)
+        
+        # Obtener el valor de retorno y restaurar el entorno
+        result = self.return_value
+        self.return_value = old_return_value
+        self.in_function = old_in_function
+        self.variables = old_variables
+        
+        return result
+
 def find_first_token(node):
-     """Encuentra recursivamente el primer Token en un nodo o subárbol."""
-     if isinstance(node, Token):
-         return node
-     if isinstance(node, Tree):
-         for child in node.children:
-             token = find_first_token(child)
-             if token:
-                 return token
-     return None
+    """Encuentra recursivamente el primer Token en un nodo o subárbol."""
+    if isinstance(node, Token):
+        return node
+    if isinstance(node, Tree):
+        for child in node.children:
+            token = find_first_token(child)
+            if token:
+                return token
+    return None
+
 def check_standalone_expressions(node, source_code_lines):
-        """
-        Recorre el árbol y emite advertencias/errores para expression_statements
-        que no parecen tener efectos secundarios.
-        """
-        warnings = []
-        if isinstance(node, Tree):
-            # ¡Este es el chequeo clave!
-            if node.data == 'expression_statement':
-                expression_node = node.children[0]
-                is_suspicious = False
-                # Determinar si la expresión es sospechosa (sin efecto secundario aparente)
-                if isinstance(expression_node, Tree):
-                    # Operaciones binarias, comparaciones, literales, variables solas
-                    if expression_node.data in ['comparison', 'add', 'sub', 'mul', 'div']:
-                       is_suspicious = True
-                    elif expression_node.data == 'atom':
-                         child_atom = expression_node.children[0]
-                         if isinstance(child_atom, Tree):
-                              # input_call SI tiene efecto, así que NO es sospechoso
-                              if child_atom.data not in ['input_call']:
-                                  is_suspicious = True
-                         elif isinstance(child_atom, Token): # Identificador solo
-                             is_suspicious = True
-                if is_suspicious:
-                    first_token = find_first_token(expression_node)
-                    line = first_token.line if first_token else '?'
-                    col = first_token.column if first_token else '?'
-                    line_content = source_code_lines[line-1].strip() if line != '?' and line <= len(source_code_lines) else ""
-                    warnings.append(
-                        f"Error Semántico (Línea {line}, Col {col}): La sentencia de expresión no parece tener efecto.\n"
-                        f"   ---> {line_content}"
-                    )
-    
-            # Recurrir para los hijos
-            for child in node.children:
-                warnings.extend(check_standalone_expressions(child, source_code_lines))
-    
-        return warnings
+    """
+    Recorre el árbol y emite advertencias/errores para expression_statements
+    que no parecen tener efectos secundarios.
+    """
+    warnings = []
+    if isinstance(node, Tree):
+        # ¡Este es el chequeo clave!
+        if node.data == 'expression_statement':
+            expression_node = node.children[0]
+            is_suspicious = False
+            # Determinar si la expresión es sospechosa (sin efecto secundario aparente)
+            if isinstance(expression_node, Tree):
+                # Operaciones binarias, comparaciones, literales, variables solas
+                if expression_node.data in ['comparison', 'add', 'sub', 'mul', 'div']:
+                   is_suspicious = True
+                elif expression_node.data == 'atom':
+                     child_atom = expression_node.children[0]
+                     if isinstance(child_atom, Tree):
+                          # input_call SI tiene efecto, así que NO es sospechoso
+                          if child_atom.data not in ['input_call']:
+                              is_suspicious = True
+                     elif isinstance(child_atom, Token): # Identificador solo
+                         is_suspicious = True
+            if is_suspicious:
+                first_token = find_first_token(expression_node)
+                line = first_token.line if first_token else '?'
+                col = first_token.column if first_token else '?'
+                line_content = source_code_lines[line-1].strip() if line != '?' and line <= len(source_code_lines) else ""
+                warnings.append(
+                    f"Error Semántico (Línea {line}, Col {col}): La sentencia de expresión no parece tener efecto.\n"
+                    f"   ---> {line_content}"
+                )
 
+        # Recurrir para los hijos
+        for child in node.children:
+            warnings.extend(check_standalone_expressions(child, source_code_lines))
 
+    return warnings
 
 if __name__ == "__main__":
     try:
@@ -567,7 +647,21 @@ if __name__ == "__main__":
 
     codigo_fuente = """
     print("Programa de cálculo simple");
-
+    
+    //vaca (x, jamón) {
+      //  return x;
+    //}
+    x=0;
+    y=18;
+    
+    while (x<23 && y==18) {
+        x = x + 1;
+        print("El valor de x es: " + x);
+        if (x > 10) then {
+            print("x es mayor que 10");
+        }
+    }
+    
     a = 5;
     b = 10;
     suma = a + b;
